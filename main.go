@@ -8,12 +8,34 @@ import (
 	"sync"
 	"time"
 	"github.com/andrewwhwang/go-radix"
-	"github.com/andrewwhwang/levenshtein"
+	lev "github.com/andrewwhwang/levenshtein"
 	"github.com/Workiva/go-datastructures/bitarray"
 )
 
 type pair struct {
     srPos, pos int
+}
+
+func min(int1, int2 int) int {
+	if int1 < int2 {
+		return int1
+	}
+	return int2
+}
+
+func max(int1, int2 int) int {
+	if int1 > int2 {
+		return int1
+	}
+	return int2
+}
+
+func reverse(s string) string {
+    runes := []rune(s)
+    for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+        runes[i], runes[j] = runes[j], runes[i]
+    }
+    return string(runes)
 }
 
 //reads shortreads line by line
@@ -129,51 +151,88 @@ func rollingHash(s *string, k, kmerInterval int) chan int {
 	return hashChan
 }
 
-//string distance distance rolling window
-//https://github.com/xrash/smetrics ukkonen's 
+func extendTail(sr string, ref *string, srPos, refPos, k, thres, window int) int{
+	end := srPos + k
+	eList := make([]int, window)
+	var eChan chan int
+
+	wordLen := min(len(sr) - (srPos + k), len(*ref) - (refPos + k))
+	srCrop := sr[srPos+k:srPos+k+wordLen]
+	refCrop := (*ref)[refPos+k : refPos+k+wordLen]
+
+	if wordLen < 64 {
+		eChan = lev.MyerDist(srCrop, refCrop)
+	} else {
+		eChan = lev.MyerDistDiag(srCrop, refCrop, 61)
+	}
+
+	for wordLen > 0 && eList[len(eList)-1] - eList[0] <= thres{
+		end++
+		wordLen--
+		eDist := <-eChan
+		eList = append(eList[1:], eDist)
+	}
+	// close(eChan)
+	return end
+}
+
+func extendHead(sr string, ref *string, srPos, refPos, k, thres, window int) int{
+	start := srPos
+	eList := make([]int, window)
+	var eChan chan int
+
+	wordLen := min(srPos, refPos)
+	srCrop := reverse(sr[srPos-wordLen:srPos])
+	refCrop := reverse((*ref)[refPos-wordLen:refPos])
+
+	if wordLen < 64 {
+		eChan = lev.MyerDist(srCrop, refCrop)
+	} else {
+		eChan = lev.MyerDistDiag(srCrop, refCrop, 61)
+	}
+
+	for wordLen > 0 && eList[len(eList)-1] - eList[0] <= thres{
+		start--
+		wordLen--
+		eDist := <-eChan
+		eList = append(eList[1:], eDist)
+	}
+	// close(eChan)
+	return start
+}
+
+
 //TODO: make the diagonal width offset dynamic
 // make a square matrix from ranging from [0 - sr head] and [sr tail - end]
 // rolling average window along the diagonal, break when the distance spikes
-func getFuzzy(sr, ref *string, srPos , refPos, k, window, thres int) (string, int) {
-	var start, end int
-
+func getFuzzy(sr string, ref *string, srPos , refPos, k, window, thres int) (string, int) {
+	
 	if window > k {
 		panic("window larger than k")
 	}
 
 	offset := refPos - srPos
-	refLen := len(*ref)
+	// refLen := len(*ref)
 
 	//fuzzy extension going left
 	var wg sync.WaitGroup
+	var start, end int
 	wg.Add(2)
+
+	//fuzzy extension going left
 	go func() {
-		defer wg.Done()
-		for i := srPos + window; i >= window; i-- {
-			start = i-window
-			refStart := start+offset
-			refEnd := i+offset
-			if refStart > 0 && thres <= levenshtein.MyerDist((*sr)[start:i], (*ref)[refStart:refEnd]) {
-				break
-			}
-		}
+		start = extendHead(sr, ref, srPos, refPos, k, thres, window)
+		wg.Done()
 	}()
 	
 	//fuzzy extension going right
 	go func() {
-		defer wg.Done()
-		for i := srPos + k - window; i <= len(*sr) - window; i++ {
-			end = i+window
-			refStart := i+offset
-			refEnd := end+offset
-			if refEnd < refLen && thres <= levenshtein.MyerDist((*sr)[i:end], (*ref)[refStart:refEnd]){
-				break
-			}
-		}
+		end = extendTail(sr, ref, srPos, refPos, k, thres, window)
+		wg.Done()
 	}()
 
 	wg.Wait()
-	return (*sr)[start:end], start+offset
+	return sr[start:end], start+offset
 }
 
 
@@ -194,7 +253,7 @@ func main() {
 
 	//make radix tree of short reads
 	//TODO: parallelize
-	tree := makeTree("resources/truncated.fq")
+	tree := makeTree("resources/short_reads.fq")
 		
 	//make k-mer dictionary of reference reads. buckethash + bloom filter
 	//TODO: parallelize kmerhash by sorting into 4 regions of table
@@ -213,7 +272,7 @@ func main() {
 			for _, prev := range prevCandidates {
 				//check if seed positions are not out of index
 				if prev.srPos+k < len(sr){
-					aln, offset := getFuzzy(&sr, &ref, prev.srPos, prev.pos, k, window, thres)
+					aln, offset := getFuzzy(sr, &ref, prev.srPos, prev.pos, k, window, thres)
 					alnLen := len(aln)
 					if alnLen > bestAlnLen {
 						bestAln, bestAlnLen, bestOffset = aln, alnLen, offset
@@ -229,12 +288,13 @@ func main() {
 					continue 
 				}
 				positions := kmerHash[hash]
+				// fmt.Println(positions)
 				//skip if too many kmers
 				if len(positions) < 10 {
 					for _, pos := range positions {
 						// fmt.Println(srPos, pos)
 						// fmt.Println(ref[pos:pos+k])
-						aln, offset := getFuzzy(&sr, &ref, srPos, pos, k, window, thres)
+						aln, offset := getFuzzy(sr, &ref, srPos, pos, k, window, thres)
 						alnLen := len(aln)
 						if alnLen > bestAlnLen {
 							bestAln, bestAlnLen, bestOffset = aln, alnLen, offset
