@@ -124,8 +124,8 @@ def smithWaterson(bestAln, ref):
     return alignment.aligned_query_sequence
 
 if __name__ == '__main__':
-    refFile = "ref.fa"
-    srFile = "short_reads.fq"
+    refFile = "resources/ref.fa"
+    srFile = "resources/short_reads.fq"
     k = 8
     window = 5
     thres = 3
@@ -172,4 +172,4 @@ if __name__ == '__main__':
         prevSimilar = hasSimilarNeighbor(tree, sr)
 
 
-# ref.fa(700bp) + short_reads.fq(30,391 SRs @ ~450bp/SR) = 1min 42secs
+# ref.fa(700bp) + short_reads.fq(30,391 SRs @ ~450bp/SR) = 2min 11secs
