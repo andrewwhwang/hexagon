@@ -264,10 +264,14 @@ func getFuzzy(sr string, ref *string, srPos, refPos, k, window, thres int) (stri
 	return sr[start:end], start + offset
 }
 
-func hasSimilarNeighbor(sr string, tree *radix.Tree) bool {
-	diff := float32(tree.SuffixDifference(sr)) / float32(len(sr))
-	return diff < 0.05
+func hasSimilarNeighbor(_ string, _ *radix.Tree) bool {
+	return false
 }
+
+// func hasSimilarNeighbor(sr string, tree *radix.Tree) bool {
+// 	diff := float32(tree.SuffixDifference(sr)) / float32(len(sr))
+// 	return diff < 0.05
+// }
 
 func printAln(info candidateInfo) {
 	offset := info.offset
@@ -282,7 +286,7 @@ func printAln(info candidateInfo) {
 
 func max(candidates []candidateInfo) candidateInfo {
 	var bestCandidate candidateInfo
-	for i, info := range candidates {
+	for _, info := range candidates {
 		if len(info.aln) > len(bestCandidate.aln) {
 			bestCandidate = info
 		}
@@ -296,7 +300,7 @@ func main() {
 
 	//make radix tree of short reads
 	//TODO: parallelize
-	tree := makeTree("resources/truncated.fq")
+	tree := makeTree("resources/short_reads.fq")
 
 	//make k-mer dictionary of reference reads. buckethash + bloom filter
 	kmerHash, bloom, ref := makeTables("resources/ref.fa", k)
@@ -307,15 +311,15 @@ func main() {
 	var prevCandidates []candidateInfo
 	var prevSimilar bool
 
+	var wg sync.WaitGroup
+	mux := &sync.Mutex{}
+
 	for sr := range uniqueIter(tree) {
 		var bestCandidate candidateInfo
 		// Check cross-similarity with previous short read.
 		// If the read is > 95% same, we can just use the previous read's good candidates
 		if prevSimilar && hasSimilarNeighbor(sr, tree) {
 			var alns []candidateInfo
-
-			var wg sync.WaitGroup
-			mux := &sync.Mutex{}
 			for _, prev := range prevCandidates {
 				//check if seed positions are not out of index
 				if prev.srPos+k < len(sr) {
@@ -334,35 +338,33 @@ func main() {
 		} else {
 			prevCandidates = nil
 			var srPos int
-			for hash := range rollingHash(&sr, k, kmerInterval) {
 
+			for hash := range rollingHash(&sr, k, kmerInterval) {
 				if in, _ := bloom.GetBit(uint64(hash)); !in {
 					srPos += kmerInterval
 					continue
 				}
-				positions := kmerHash[hash]
+				wg.Add(1)
+				go func(hash int) {
+					positions := kmerHash[hash]
 
-				//skip if too many kmers.
-				//sequences with high repeat aren't usefull algorithmically and biologically
-				if len(positions) < 10 {
-					var wg sync.WaitGroup
-					mux := &sync.Mutex{}
-					for _, pos := range positions {
-						wg.Add(1)
-						go func(pos int) {
+					//skip if too many kmers.
+					//sequences with high repeat aren't usefull algorithmically and biologically
+					if len(positions) < 10 {
+						for _, pos := range positions {
 							aln, offset := getFuzzy(sr, &ref, srPos, pos, k, window, thres)
 							if float32(len(aln)) > float32(len(sr))*0.10 {
 								mux.Lock()
 								prevCandidates = append(prevCandidates, candidateInfo{aln, offset, srPos, pos})
 								mux.Unlock()
 							}
-							wg.Done()
-						}(pos)
+						}
 					}
-					wg.Wait()
-				}
-				srPos += kmerInterval
+					srPos += kmerInterval
+					wg.Done()
+				}(hash)
 			}
+			wg.Wait()
 			bestCandidate = max(prevCandidates)
 		}
 		prevSimilar = hasSimilarNeighbor(sr, tree)
