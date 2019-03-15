@@ -4,9 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	// "strings"
+	"strings"
 	"sync"
-	// "time"
+	"time"
 	"github.com/andrewwhwang/go-radix"
 	lev "github.com/andrewwhwang/levenshtein"
 	"github.com/Workiva/go-datastructures/bitarray"
@@ -150,82 +150,82 @@ func rollingHash(s *string, k, kmerInterval int) chan int {
 	}()
 	return hashChan
 }
-// func extendTail(sr string, ref *string, srPos, refPos, k, thres, window int) int{
-// 	end := srPos + k
-// 	offset := refPos - srPos
+func extendTail(sr string, ref *string, srPos, refPos, k, thres, window int) int{
+	end := srPos + k
+	offset := refPos - srPos
 
-// 	for i := srPos + k - window; i < len(sr) - window; i++{
-// 		eDist := lev.Distance(sr[i:i+window], (*ref)[i+offset:i+offset+window])
-// 		end++
-// 		if eDist > thres || i + offset + window >= len(*ref) - 1 {
-// 			break
-// 		}
-// 	}
-// 	return end
-// }
-
-// func extendHead(sr string, ref *string, srPos, refPos, k, thres, window int) int{
-// 	start := srPos
-// 	offset := refPos - srPos
-
-// 	for i := srPos; i >= 0; i--{
-// 		eDist := lev.Distance(sr[i:i+window], (*ref)[i+offset:i+offset+window])
-// 		start = i
-// 		if eDist > thres || i + offset <= 0 {
-// 			break
-// 		}
-// 	}
-// 	return start
-// }
+	for i := srPos + k - window; i < len(sr) - window; i++{
+		eDist := lev.Distance(sr[i:i+window], (*ref)[i+offset:i+offset+window])
+		end++
+		if eDist > thres || i + offset + window >= len(*ref) - 1 {
+			break
+		}
+	}
+	return end
+}
 
 func extendHead(sr string, ref *string, srPos, refPos, k, thres, window int) int{
 	start := srPos
-	eList := make([]int, window)
-	var eChan chan int
+	offset := refPos - srPos
 
-	wordLen := min(srPos, refPos)
-	srCrop := reverse(sr[srPos-wordLen:srPos])
-	refCrop := reverse((*ref)[refPos-wordLen:refPos])
-
-	if wordLen < 64 {
-		eChan = lev.MyerDist(srCrop, refCrop)
-	} else {
-		eChan = lev.MyerDistDiag(srCrop, refCrop, 61)
-	}
-
-	for wordLen > 0 && eList[len(eList)-1] - eList[0] <= thres{
-		start--
-		wordLen--
-		eDist := <-eChan
-		eList = append(eList[1:], eDist)
+	for i := srPos; i >= 0; i--{
+		eDist := lev.Distance(sr[i:i+window], (*ref)[i+offset:i+offset+window])
+		start = i
+		if eDist > thres || i + offset <= 0 {
+			break
+		}
 	}
 	return start
 }
 
-func extendTail(sr string, ref *string, srPos, refPos, k, thres, window int) int{
-	end := srPos + k
-	eList := make([]int, window)
-	var eChan chan int
+// func extendHead(sr string, ref *string, srPos, refPos, k, thres, window int) int{
+// 	start := srPos
+// 	eList := make([]int, window)
+// 	var eChan chan int
 
-	wordLen := min(len(sr) - (srPos + k), len(*ref) - (refPos + k))
-	srCrop := sr[srPos+k:srPos+k+wordLen]
-	refCrop := (*ref)[refPos+k : refPos+k+wordLen]
+// 	wordLen := min(srPos, refPos)
+// 	srCrop := reverse(sr[srPos-wordLen:srPos])
+// 	refCrop := reverse((*ref)[refPos-wordLen:refPos])
 
-	if wordLen < 64 {
-		eChan = lev.MyerDist(srCrop, refCrop)
-	} else {
-		eChan = lev.MyerDistDiag(srCrop, refCrop, 15)
-	}
+// 	if wordLen < 32 {
+// 		eChan = lev.MyerDist(srCrop, refCrop)
+// 	} else {
+// 		eChan = lev.MyerDistDiag(srCrop, refCrop, 15)
+// 	}
 
-	for wordLen > 0 && eList[len(eList)-1] - eList[0] <= thres{
-		end++
-		wordLen--
-		eDist := <-eChan
-		eList = append(eList[1:], eDist)
-	}
-	// close(eChan)
-	return end
-}
+// 	for wordLen > 0 && eList[len(eList)-1] - eList[0] <= thres{
+// 		start--
+// 		wordLen--
+// 		eDist := <-eChan
+// 		eList = append(eList[1:], eDist)
+// 	}
+// 	return start
+// }
+
+// func extendTail(sr string, ref *string, srPos, refPos, k, thres, window int) int{
+// 	end := srPos + k
+// 	eList := make([]int, window)
+// 	var eChan chan int
+
+// 	wordLen := min(len(sr) - (srPos + k), len(*ref) - (refPos + k))
+// 	srCrop := sr[srPos+k:srPos+k+wordLen]
+// 	refCrop := (*ref)[refPos+k : refPos+k+wordLen]
+
+// 	if wordLen < 64 {
+// 		eChan = lev.MyerDist(srCrop, refCrop)
+// 	} else {
+// 		eChan = lev.MyerDistDiag(srCrop, refCrop, 15)
+// 	}
+
+// 	for wordLen > 0 && eList[len(eList)-1] - eList[0] <= thres{
+// 		end++
+// 		wordLen--
+// 		eDist := <-eChan
+// 		eList = append(eList[1:], eDist)
+// 	}
+// 	// close(eChan)
+// 	return end
+// }
 
 //TODO: make the diagonal width offset dynamic
 // make a square matrix from ranging from [0 - sr head] and [sr tail - end]
@@ -263,81 +263,60 @@ func getFuzzy(sr string, ref *string, srPos , refPos, k, window, thres int) (str
 
 func printAln(aln string, offset int) {
 	if offset > 0 {	
-		// padding := strings.Repeat(" ", offset)
-		// fmt.Println(padding + aln)
+		padding := strings.Repeat(" ", offset)
+		fmt.Println(padding + aln)
 	} else {
-		// fmt.Println(aln[-1 * offset:])
+		fmt.Println(aln[-1 * offset:])
 	}
 }
 
 
 func main() {
+	start := time.Now()
 	k, kmerInterval := 8, 4
-	window, thres := 5, 3
+	window, thres := 6, 3
 
 	//make radix tree of short reads
-	//TODO: parallelize
 	tree := makeTree("resources/short_reads.fq")
 		
 	//make k-mer dictionary of reference reads. buckethash + bloom filter
-	//TODO: parallelize kmerhash by sorting into 4 regions of table
 	kmerHash, bloom, ref := makeTables("resources/ref.fa", k)
 
 	fmt.Println(ref)
 	// //interate through unique short reads and align them
-	var prevCandidates []pair
-	var prevSimilar bool
 
 	for sr := range uniqueIter(tree) {
-		var srPos, bestAlnLen, bestOffset int
-		var bestAln string
-		//if the new SR < 5% different, reuse the previous SR's seeds.
-		diff := float32(tree.SuffixDifference(sr)) / float32(len(sr))
-		if diff < 0.05 && prevSimilar {
-			for _, prev := range prevCandidates {
-				//check if seed positions are not out of index
-				if prev.srPos+k < len(sr){
-					aln, offset := getFuzzy(sr, &ref, prev.srPos, prev.pos, k, window, thres)
-					alnLen := len(aln)
-					if alnLen > bestAlnLen {
-						bestAln, bestAlnLen, bestOffset = aln, alnLen, offset
-					}
-				}
-			}
-		} else {
-			prevCandidates = nil
-			//only run through process if > 5% different from last SR
-			for hash := range rollingHash(&sr, k, kmerInterval) {
+		go func(sr string) {
+			var srPos, bestAlnLen, bestOffset int
+			var bestAln string
 
+			for hash := range rollingHash(&sr, k, kmerInterval) {
 				if in, _ := bloom.GetBit(uint64(hash)); !in{ 
 					srPos += kmerInterval
 					continue 
 				}
+
 				positions := kmerHash[hash]
 				// fmt.Println(positions)
 				//skip if too many kmers
 				if len(positions) < 10 {
 					for _, pos := range positions {
-						// fmt.Println(srPos, pos)
-						// fmt.Println(ref[pos:pos+k])
 						aln, offset := getFuzzy(sr, &ref, srPos, pos, k, window, thres)
 						alnLen := len(aln)
 						if alnLen > bestAlnLen {
 							bestAln, bestAlnLen, bestOffset = aln, alnLen, offset
 						}
-						if alnLen > 25 {
-							prevCandidates = append(prevCandidates, pair{srPos, pos})
-						}
 					}
 				}
 				srPos += kmerInterval
 			}
-		}
-		prevSimilar = diff < 0.05
-		if bestAlnLen > 15 {
-			//do smith-waterman alignment
-			printAln(bestAln, bestOffset)
-		}
-	}
+			if bestAlnLen > 10 {
+				//do smith-waterman alignment
+				printAln(bestAln, bestOffset)
+			}
+		}(sr)
+	}    
+	elapsed := time.Since(start)
+    fmt.Println(elapsed)
 	fmt.Println("done")
 }
