@@ -312,7 +312,7 @@ func main() {
 	var prevSimilar bool
 
 	var wg sync.WaitGroup
-	mux := &sync.Mutex{}
+	mux := sync.Mutex{}
 
 	for sr := range uniqueIter(tree) {
 		var bestCandidate candidateInfo
