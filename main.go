@@ -66,9 +66,9 @@ func makeTree(filename string) *radix.Tree {
 	tree := radix.New()
 	for word := range getReadsFQ(filename) {
 		counter := 1
-		if v, i := tree.Get(word); i == true {
-			counter = v.(int) + 1
-		}
+		// if v, i := tree.Get(word); i == true {
+		// 	counter = v.(int) + 1
+		// }
 		tree.Insert(word, counter)
 	}
 	return tree
