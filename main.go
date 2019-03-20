@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -295,15 +296,18 @@ func max(candidates []candidateInfo) candidateInfo {
 }
 
 func main() {
+	refFile := flag.String("ref", "resources/ref.fa", "reference fasta")
+	srFile := flag.String("sr", "resources/short_reads.fq", "short read fastq")
+
 	k, kmerInterval := 8, 4
 	window, thres := 5, 3
 
 	//make radix tree of short reads
 	//TODO: parallelize
-	tree := makeTree("resources/short_reads.fq")
+	tree := makeTree(*srFile)
 
 	//make k-mer dictionary of reference reads. buckethash + bloom filter
-	kmerHash, bloom, ref := makeTables("resources/ref.fa", k)
+	kmerHash, bloom, ref := makeTables(*refFile, k)
 
 	fmt.Println(ref)
 
