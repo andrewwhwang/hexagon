@@ -4,6 +4,7 @@ from bitarray import bitarray
 from skbio.alignment import StripedSmithWaterman
 import numpy as np
 import editdistance
+import argparse
 
 BASE_MAP = {'A':0,'C':1,'G':2,'T':3}
 
@@ -124,8 +125,14 @@ def smithWaterson(bestAln, ref):
     return alignment.aligned_query_sequence
 
 if __name__ == '__main__':
-    refFile = "resources/ref.fa"
-    srFile = "resources/short_reads.fq"
+
+    parser = argparse.ArgumentParser(description='Description of your program')
+    parser.add_argument('-r','--ref', help='reference fasta file', required=True)
+    parser.add_argument('-s','--sr', help='short read fastq file', required=True)
+    args = vars(parser.parse_args())
+
+    refFile = args["ref"]
+    srFile = args["sr"] 
     k = 8
     window = 5
     thres = 3
