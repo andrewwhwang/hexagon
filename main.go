@@ -265,14 +265,14 @@ func getFuzzy(sr string, ref *string, srPos, refPos, k, window, thres int) (stri
 	return sr[start:end], start + offset
 }
 
-func hasSimilarNeighbor(_ string, _ *radix.Tree) bool {
-	return false
-}
-
-// func hasSimilarNeighbor(sr string, tree *radix.Tree) bool {
-// 	diff := float32(tree.SuffixDifference(sr)) / float32(len(sr))
-// 	return diff < 0.05
+// func hasSimilarNeighbor(_ string, _ *radix.Tree) bool {
+// 	return false
 // }
+
+func hasSimilarNeighbor(sr string, tree *radix.Tree) bool {
+	diff := float32(tree.SuffixDifference(sr)) / float32(len(sr))
+	return diff < 0.05
+}
 
 func printAln(info candidateInfo) {
 	offset := info.offset
